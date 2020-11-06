@@ -187,7 +187,10 @@ int main (int argc, char *argv[])
       messageQ.mtype = 1;
       msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
       
-      
+      if(proc_count == 100)
+      { 
+        break;
+      }
       proc_count++;
       printf("OSS: Process Count: %d --------------------> \n", proc_count);
       childPid = fork();
