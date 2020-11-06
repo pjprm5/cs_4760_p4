@@ -16,13 +16,14 @@
 #include <sys/shm.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <signal.h>
 #include "sharedinfo.h"
+#include <math.h>
 
-unsigned int randomTime()
-{
-  unsigned int randomNum = ((rand() % (1500000000 - 1000000 + 1)) +1);
-  return randomNum;
-}
+//Prototypes
+void raiseAlarm();
+unsigned int randomTime();
+
 
 // Global variables.
 SharedInfo *sharedInfo;
@@ -32,19 +33,22 @@ int msqID;
 // Message queue struct
 struct MessageQueue {
   long mtype;
-  char messBuff[1];
+  char messBuff[2];
 };
 
 #define maxTimeBetweenNewProcsNS 500000000
 #define maxTimeBetweenNewProcsSecs 1
+#define baseQuantum 10000000
 
 
 int main (int argc, char *argv[])
 {
+  signal(SIGALRM, raiseAlarm);
 
   printf("oss.c begins....\n");
 
   int proc_count = 0;
+  int bitVector[18];
   
   // Timespec struct for nanosleep.
   struct timespec tim1, tim2;
@@ -96,6 +100,8 @@ int main (int argc, char *argv[])
     exit(-1);
   }
 
+  alarm(3);
+
   // Begin launching child processes -----------------------------------  
   // Set shared clock to zero
   sharedInfo->secs = 0;
@@ -121,157 +127,162 @@ int main (int argc, char *argv[])
 
   // Launch first child -----------------------------------------------
   pid_t childPid; 
-  int i;
-  for (i = 0; i < 1; i++)
+  
+  
+  proc_count++;
+  childPid = fork();
+  if (childPid == 0)
   {
-    proc_count++;
-    childPid = fork();
-    if (childPid == 0)
+    char *args[] = {"./user_proc", NULL};
+    execvp(args[0], args);
+  }
+  else if (childPid < 0)
+  {
+    perror("Error: Fork() failed");
+  }
+  else if (childPid > 0) 
+  {
+    FILE* fptr = (fopen("output", "a"));
+    if (fptr == NULL)
     {
-      char *args[] = {"./user_proc", NULL};
-      execvp(args[0], args);
+      perror("OSS: Error: ftpr error");
     }
-    else if (childPid < 0)
-    {
-      perror("Error: Fork() failed");
-    }
-    else if ((childPid > 0) && (i >= 0))
-    {
-      FILE* fptr = (fopen("output", "a"));
-      if (fptr == NULL)
-      {
-        perror("OSS: Error: ftpr error");
-      }
-      fprintf(fptr, "OSS(%d): Creating child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
-      printf("OSS(%d): Creating child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
-      fclose(fptr);
-    }
+    fprintf(fptr, "OSS(%d): Creating child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
+    printf("OSS(%d): Creating child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
+    fclose(fptr);
   }
 
-  //sharedInfo->arrayPCB[0].totalCPUtime = 100;
-  //printf("Total CPU Time: %u \n", sharedInfo->arrayPCB[0].totalCPUtime);
-  
   // Parent/Main loop
   while (1)
   {
-    printf("OSS: Inside main loop. \n");
     
-    // If terminated 
+    // Blocking receive of only type 2 msg
     msgrcv(msqID, &messageQ, sizeof(messageQ.messBuff), 2, 0);
-    if (sharedInfo->nanosecs >= 1000000000) // Fix the clock
+
+    // Fix clock
+
+   /* if (sharedInfo->nanosecs >= 1000000000)
     {
       sharedInfo->secs = sharedInfo->secs + sharedInfo->nanosecs/1000000000; // Add seconds to nanosecs after nanosecs gets integer division.
       sharedInfo->nanosecs = sharedInfo->nanosecs % 1000000000; // Modulo operation to get nanosecs.
-    }
+    }*/
+    // If terminated.
     if (strcmp(messageQ.messBuff, "1") == 0)
     {
       // Process terminated, wait for process, then log what was terminated and launch a new process.
-      printf("OSS: Process Terminated. \n");
-      printf("Process time = %u \n", sharedInfo->arrayPCB[0].totalCPUtime);
       wait(NULL);
-      break;
+      printf("OSS:Process Terminated: Process time = %u \n", sharedInfo->arrayPCB[0].totalCPUtime);
+      
+      FILE* fptr = (fopen("output", "a"));
+      if (fptr == NULL)
+      {
+        perror("OSS: Error: fptr error. \n");
+      }
+
+      fprintf(fptr, "OSS(%d): Receiving that child process with pid: %d was terminated at time: %u:%u \n", getpid(), sharedInfo->arrayPCB[0].localSimPid, sharedInfo->secs, sharedInfo->nanosecs);
+      printf("OSS(%d): Receiving that child process with pid: %d was terminated at time: %u:%u.\n", getpid(), sharedInfo->arrayPCB[0].localSimPid, sharedInfo->secs, sharedInfo->nanosecs);
+      fclose(fptr);
+      //msgctl(msqID, IPC_RMID, NULL);
+
+      messageQ.mtype = 1;
+      msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
+      
+      
+      proc_count++;
+      printf("OSS: Process Count: %d --------------------> \n", proc_count);
+      childPid = fork();
+      if (childPid == 0)
+      {
+        char *args[] = {"./user_proc", NULL};
+        execvp(args[0], args);
+      }
+
+      else if (childPid < 0)
+      {
+        perror("Error: Fork() failed");
+      }
+      else if (childPid > 0) 
+      {
+        FILE* fptr = (fopen("output", "a"));
+        if (fptr == NULL)
+        {
+          perror("OSS: Error: ftpr error");
+        }
+        fprintf(fptr, "OSS(%d): Creating child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
+        printf("OSS(%d): Creating child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
+        fclose(fptr);
+      }      
     }
-    
-    
+
     // If ran entire quantum.
-    //msgrcv(msqID, &messageQ, sizeof(messageQ.messBuff), 3, IPC_NOWAIT);
-    if (strcmp(messageQ.messBuff, "2") == 0)
+    else if (strcmp(messageQ.messBuff, "2") == 0)
     {
-      wait(NULL);
+      
+      if (sharedInfo->nanosecs >= pow(2,32) - 10000000 + 1)
+      {
+        sharedInfo->secs = sharedInfo->secs + sharedInfo->nanosecs/1000000000; // Add seconds to nanosecs after nanosecs gets integer division.
+        sharedInfo->nanosecs = sharedInfo->nanosecs % 1000000000; // Modulo operation to get nanosecs.
+      }
       printf("OSS: Process Ran Entire Quantum. \n");
       sharedInfo->nanosecs = sharedInfo->nanosecs + 10000000; // Update nanosecs.
       sharedInfo->arrayPCB[0].totalCPUtime = sharedInfo->arrayPCB[0].totalCPUtime + 10000000; // Update total CPU time.
       sharedInfo->arrayPCB[0].timeInSystem = 10000000;
       sharedInfo->arrayPCB[0].timeLastBurst = 10000000;
-      
-      // Send out message for user_proc to receive
-      //messageQ.mtype = 1;
-      //msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
-      
-      childPid = fork();
-      if (childPid == 0)
-      {
-        char *args[] = {"./user_proc", NULL};
-        execvp(args[0], args);
 
-      }
-      else if (childPid < 0)
+      FILE* fptr = (fopen("output", "a"));
+      if (fptr == NULL)
       {
-        while(nanosleep(&tim1, &tim2));
-        //perror("OSS: Error: Fork() failed inside main loop. \n");
+        perror("OSS: Error: fptr error. \n");
       }
-      else if (childPid > 0)
-      {
-        FILE* fptr = (fopen("output", "a"));
-        if (fptr == NULL)
-        {
-          perror("OSS: Error: fptr error. \n");
-        }
-        fprintf(fptr, "OSS(%d): Creating Child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
-        printf("OSS(%d): Creating Child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
-        fclose(fptr);
 
-        //messageQ.mtype = 1;
-        //msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
-      }
-      //messageQ.mtype = 1;
-      //msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
+      fprintf(fptr, "OSS(%d): Receiving that child process with pid: %d was RAN ENTIRE QUANTUM at time: %u:%u \n", getpid(), sharedInfo->arrayPCB[0].localSimPid, sharedInfo->secs, sharedInfo->nanosecs);
+      printf("OSS(%d): Receiving that child process with pid: %d was RAN ENTIRE QUANTUM at time: %u:%u.\n", getpid(), sharedInfo->arrayPCB[0].localSimPid, sharedInfo->secs, sharedInfo->nanosecs);
+      fclose(fptr);
+
+      messageQ.mtype = 1;
+      msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
     }
      
     
     // If interrupted.
-    //msgrcv(msqID, &messageQ, sizeof(messageQ.messBuff), 4, IPC_NOWAIT);
-    if (strcmp(messageQ.messBuff, "3") == 0)
+    else if (strcmp(messageQ.messBuff, "3") == 0)
     {
-      wait(NULL);
-      printf("OSS: Process was interrupted. \n");
       // Process was interrupted, put into a blocked queue and schedule another process.
 
-      // Send out message for user_proc to receive
-      //messageQ.mtype = 1;
-      //msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
-      childPid = fork();
-      if (childPid == 0)
+      FILE* fptr = (fopen("output", "a"));
+      if (fptr == NULL)
       {
-        char *args[] = {"./user_proc", NULL};
-        execvp(args[0], args);
+        perror("OSS: Error: fptr error. \n");
+      }
+
+      fprintf(fptr, "OSS(%d): Receiving that child process with pid: %d was interrupted at time: %u:%u \n", getpid(), sharedInfo->arrayPCB[0].localSimPid, sharedInfo->secs, sharedInfo->nanosecs);
+      printf("OSS(%d): Receiving that child process with pid: %d was interrupted at time: %u:%u.\n", getpid(), sharedInfo->arrayPCB[0].localSimPid, sharedInfo->secs, sharedInfo->nanosecs);
+      fclose(fptr);
         
-      }
-      else if (childPid < 0)
-      {
-        while(nanosleep(&tim1, &tim2));
-        //perror("OSS: Error: Fork() failed inside main loop. \n");
-      }
-      else if (childPid > 0)
-      {
-        FILE* fptr = (fopen("output", "a"));
-        if (fptr == NULL)
-        {
-          perror("OSS: Error: fptr error. \n");
-        }
-        fprintf(fptr, "OSS(%d): Creating Child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
-        printf("OSS(%d): Creating Child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
-        fclose(fptr);
-
-        //messageQ.mtype = 1;
-        //msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
-      }
-
+      messageQ.mtype = 1;
+      msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
     }
-    messageQ.mtype = 1;
-    msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);        
+    //messageQ.mtype = 1;
+    //msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);        
   }
-
-
- 
-
-
-
-
-
 
   shmdt(sharedInfo); // Detach shared memory.
   shmctl(infoID, IPC_RMID, NULL); // Destroy shared memory.
   msgctl(msqID, IPC_RMID, NULL); // Destroy message queue.
   return 0;
+}
+
+void raiseAlarm() // Kill everything once time limit hits which is 3 real life seconds
+{
+  printf("\n Time limit hit, terminating all processes. \n");
+  shmdt(sharedInfo);
+  shmctl(infoID, IPC_RMID, NULL);
+  msgctl(msqID, IPC_RMID, NULL);
+  kill(0, SIGKILL);
+}
+
+unsigned int randomTime() // Random time for scheduler between 1,500,000,000 nanosecs and 1,000,000 nanosecs
+{
+  unsigned int randomNum = ((rand() % (1500000000 - 1000000 + 1)) +1);
+  return randomNum;
 }

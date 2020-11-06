@@ -32,7 +32,7 @@ int msqID;
 // Message queue struct 
 struct MessageQueue {
   long mtype;
-  char messBuff[1];
+  char messBuff[2];
 };
 
 int main (int argc, char *argv[])
@@ -73,45 +73,59 @@ int main (int argc, char *argv[])
     perror("USER: Error: shmat failure");
     exit(-1);
   }
-
+    
+  int getChildPid = getpid();
+  char childBuff[20];
+  sharedInfo->arrayPCB[0].localSimPid = getpid();
   while (1)
   {
-    if (msgrcv(msqID, &messageQ, sizeof(messageQ.messBuff), 1, 0) == 1) // Wait to receive message of type 1 for now.
+    msgrcv(msqID, &messageQ, sizeof(messageQ.messBuff), 1, 0); // Wait to receive message of type 1 for now.
+
+    /*if (strcmp(messageQ.messBuff, itoa(getChildPid, childBuff, 20) == 0))
     {
-      printf("USER: Inside main loop. \n");
-      unsigned int chanceForOption = randomTime(); // Populate random number to decide what happens to process below.
-      printf("USER: chanceForOption = %u \n", chanceForOption);
-
-      if (chanceForOption > 0  && chanceForOption <= 5) // 1. Process has determinted to terminate. 
-      {
-        printf("USER: Process is terminating. \n");
-        strcpy(messageQ.messBuff, "1");
-        messageQ.mtype = 2;
-        msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0); // Send msg back of type 2 indicating the termination..
-        shmdt(sharedInfo);
-        return 0;
-      }
-
-      if (chanceForOption > 5 && chanceForOption <= 70) // 2. Process has determined to run it's entire quantum.
-      {
-        printf("USER: Process has run its quantum. \n");
-        strcpy(messageQ.messBuff, "2");
-        messageQ.mtype = 2;
-        msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0); // Send msg back of type 2 indicating process has run it's entire quantum.
-        shmdt(sharedInfo);
-        return 0;
-      }
-
-      if (chanceForOption > 70 && chanceForOption <= 100);
-      {
-        printf("USER: Process has been I/O. \n");
-        strcpy(messageQ.messBuff, "3");
-        messageQ.mtype = 2;
-        msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0); // Send msg back of type 2 indicating process has been interrupted.
-        shmdt(sharedInfo);
-        return 0;
-      }
+      continue;
     }
+
+    if (strcmp(messageQ.messBuff, itoa(getChildPid, childBuff, 20) != 0))
+    {
+      break;
+    }*/
+
+    //Assign this process's pid to localSimPid within the PCB inside shared memory
+
+    //printf("USER: Inside main loop. \n");
+    unsigned int chanceForOption = randomTime(); // Populate random number to decide what happens to process below.
+    printf("USER: chanceForOption = %u \n", chanceForOption);
+
+    if (chanceForOption > 0  && chanceForOption <= 5) // 1. Process has determinted to terminate. 
+    {
+      printf("USER: Process is terminating. \n");
+      strcpy(messageQ.messBuff, "1");
+      messageQ.mtype = 2;
+      msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0); // Send msg back of type 2 indicating the termination..
+      //msgctl(msqID, IPC_RMID, NULL);
+      shmdt(sharedInfo);
+      return 0;
+    }
+
+    else if (chanceForOption > 5 && chanceForOption <= 70) // 2. Process has determined to run it's entire quantum.
+    {
+      printf("USER: Process has run its quantum. \n");
+      strcpy(messageQ.messBuff, "2");
+      messageQ.mtype = 2;
+      msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0); // Send msg back of type 2 indicating process has run it's entire quantum.
+      //shmdt(sharedInfo);
+    }
+
+    else if (chanceForOption > 70 && chanceForOption <= 100) // 3. Process has determined to interrupt.
+    {
+      printf("USER: Process has been I/O. \n");
+      strcpy(messageQ.messBuff, "3");
+      messageQ.mtype = 2;
+      msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0); // Send msg back of type 2 indicating process has been interrupted.
+      //shmdt(sharedInfo);
+    }
+    
     //messageQ.mtype = 2;
     //msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
   }
