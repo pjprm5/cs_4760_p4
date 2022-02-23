@@ -32,7 +32,7 @@ int msqID;
 // Message queue struct 
 struct MessageQueue {
   long mtype;
-  char messBuff[2];
+  char messBuff[10];
 };
 
 int main (int argc, char *argv[])
@@ -74,23 +74,29 @@ int main (int argc, char *argv[])
     exit(-1);
   }
     
-  int getChildPid = getpid();
-  char childBuff[20];
+  //int getChildPid = getpid();
+  //char childBuff[20];
+  //char childReal[20];
   sharedInfo->arrayPCB[0].localSimPid = getpid();
+  
+ 
+
+
   while (1)
   {
+    //printf("USER USER USER\n");
     msgrcv(msqID, &messageQ, sizeof(messageQ.messBuff), 1, 0); // Wait to receive message of type 1 for now.
-
-    /*if (strcmp(messageQ.messBuff, itoa(getChildPid, childBuff, 20) == 0))
-    {
-      continue;
-    }
-
-    if (strcmp(messageQ.messBuff, itoa(getChildPid, childBuff, 20) != 0))
+    //snprintf(childBuff, 20, "%d", getChildPid);
+    //strcpy(childReal, childBuff);
+    //printf("In childbuff: %s \n", childBuff);
+    //printf("In queue: %s \n", messageQ.messBuff);
+    /*if (strcmp(messageQ.messBuff, childReal) != 0) //check PID, if yes continue
     {
       break;
     }*/
-
+    
+       
+    
     //Assign this process's pid to localSimPid within the PCB inside shared memory
 
     //printf("USER: Inside main loop. \n");

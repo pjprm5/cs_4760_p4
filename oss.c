@@ -33,7 +33,7 @@ int msqID;
 // Message queue struct
 struct MessageQueue {
   long mtype;
-  char messBuff[2];
+  char messBuff[10];
 };
 
 #define maxTimeBetweenNewProcsNS 500000000
@@ -66,7 +66,7 @@ int main (int argc, char *argv[])
     exit(-1);
   }
 
-  messageQ.mtype = 1; // Declare initial mtype as 1 for ./oss
+  /*messageQ.mtype = 1; // Declare initial mtype as 1 for ./oss
 
   strcpy(messageQ.messBuff, "0"); // Put msg in buffer
   
@@ -74,7 +74,7 @@ int main (int argc, char *argv[])
   {
     perror("OSS: Error: msgsnd ");
     exit(-1);
-  }
+  }*/
   
   // Allocate shared memory information -------------------------------
   key_t infoKey = ftok("makefile", 123); 
@@ -126,15 +126,26 @@ int main (int argc, char *argv[])
   printf("Time 1st child launched --> %u:%u \n", sharedInfo->secs, sharedInfo->nanosecs);
 
   // Launch first child -----------------------------------------------
+  char childBuff[20];
+  int getChildPid;
   pid_t childPid; 
   
   
   proc_count++;
+  //int index_count;
+  //index_count++;
   childPid = fork();
+  
+  getChildPid = childPid;
+  snprintf(childBuff, 20, "%d", getChildPid);
+  strcpy(messageQ.messBuff, childBuff);
+  messageQ.mtype = 1;
+  msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
   if (childPid == 0)
   {
     char *args[] = {"./user_proc", NULL};
     execvp(args[0], args);
+    //execl("user_proc", "user_proc", index_count-1, NULL);
   }
   else if (childPid < 0)
   {
@@ -151,6 +162,10 @@ int main (int argc, char *argv[])
     printf("OSS(%d): Creating child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
     fclose(fptr);
   }
+  //sharedInfo->arrayPCB[index_count-1].localSimPid = index_count-1;
+  //bitVector[index_count-1] = 1;  
+
+
 
   // Parent/Main loop
   while (1)
@@ -183,21 +198,25 @@ int main (int argc, char *argv[])
       printf("OSS(%d): Receiving that child process with pid: %d was terminated at time: %u:%u.\n", getpid(), sharedInfo->arrayPCB[0].localSimPid, sharedInfo->secs, sharedInfo->nanosecs);
       fclose(fptr);
       //msgctl(msqID, IPC_RMID, NULL);
-
-      messageQ.mtype = 1;
-      msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
+      
+      //messageQ.mtype = 1;
+      //msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
       
       if(proc_count == 100)
       { 
         break;
       }
       proc_count++;
+      //index_count++;
+      //bitVector[index_count-1] = 1;
       printf("OSS: Process Count: %d --------------------> \n", proc_count);
       childPid = fork();
+      
       if (childPid == 0)
       {
         char *args[] = {"./user_proc", NULL};
         execvp(args[0], args);
+        //execl("user_proc", "user_proc", index_count-1, NULL);
       }
 
       else if (childPid < 0)
@@ -214,7 +233,16 @@ int main (int argc, char *argv[])
         fprintf(fptr, "OSS(%d): Creating child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
         printf("OSS(%d): Creating child: %d at time: %u:%u \n", getpid(), childPid, sharedInfo->secs, sharedInfo->nanosecs);
         fclose(fptr);
-      }      
+      }
+      //sharedInfo->arrayPCB[index_count-1].localSimPid = index_count-1;
+      //bitVector[index_count-1] = 1;
+      
+      //getChildPid = childPid;
+      //snprintf(childBuff, 20, "%d", getChildPid);
+      //strcpy(messageQ.messBuff, childBuff);
+      messageQ.mtype = 1;
+      msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
+      
     }
 
     // If ran entire quantum.
@@ -241,9 +269,17 @@ int main (int argc, char *argv[])
       fprintf(fptr, "OSS(%d): Receiving that child process with pid: %d was RAN ENTIRE QUANTUM at time: %u:%u \n", getpid(), sharedInfo->arrayPCB[0].localSimPid, sharedInfo->secs, sharedInfo->nanosecs);
       printf("OSS(%d): Receiving that child process with pid: %d was RAN ENTIRE QUANTUM at time: %u:%u.\n", getpid(), sharedInfo->arrayPCB[0].localSimPid, sharedInfo->secs, sharedInfo->nanosecs);
       fclose(fptr);
-
+      
+      //getChildPid = sharedInfo->arrayPCB[0].localSimPid; 
+      //snprintf(childBuff, 20, "%d", getChildPid);
+      //strcpy(messageQ.messBuff, childBuff);
+     
+      //printf("messageQ: %s childBuff: %s getChildPid: %d \n", messageQ.messBuff, childBuff, getChildPid);
       messageQ.mtype = 1;
-      msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
+      if (msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0) == -1)
+      {
+        perror("OSS: Error: msgsnd Entire Quantum \n");
+      }
     }
      
     
@@ -261,9 +297,17 @@ int main (int argc, char *argv[])
       fprintf(fptr, "OSS(%d): Receiving that child process with pid: %d was interrupted at time: %u:%u \n", getpid(), sharedInfo->arrayPCB[0].localSimPid, sharedInfo->secs, sharedInfo->nanosecs);
       printf("OSS(%d): Receiving that child process with pid: %d was interrupted at time: %u:%u.\n", getpid(), sharedInfo->arrayPCB[0].localSimPid, sharedInfo->secs, sharedInfo->nanosecs);
       fclose(fptr);
-        
+      
+      //getChildPid = sharedInfo->arrayPCB[0].localSimPid;
+      //snprintf(childBuff, 20, "%d", getChildPid);
+      //strcpy(messageQ.messBuff, childBuff);
+      
+      //printf("messageQ: %s childBuff: %s getChildPid: %d \n", messageQ.messBuff, childBuff, getChildPid);
       messageQ.mtype = 1;
-      msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);
+      if (msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0) == -1)
+      {
+        perror("OSS: Error: msgsnd If interrupted \n");
+      }
     }
     //messageQ.mtype = 1;
     //msgsnd(msqID, &messageQ, sizeof(messageQ.messBuff), 0);        
